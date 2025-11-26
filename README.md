@@ -90,12 +90,65 @@ const ebayResponse = await fetch('https://api.ebay.com/sell/account/v1/privilege
 ### "Invalid scope"
 - Check scopes in `.env` are valid and enabled for your app
 
+## Vercel Deployment
+
+This project supports deployment to Vercel with persistent token storage via Vercel KV (Redis).
+
+### 1. Deploy to Vercel
+
+```bash
+npm install -g vercel
+vercel login
+vercel --yes
+```
+
+### 2. Set Up Vercel KV (Redis)
+
+1. Go to your [Vercel Dashboard](https://vercel.com)
+2. Select your project → **Storage** tab
+3. Click **Create** → Choose **KV** (Redis)
+4. Name it (e.g., `ebay-tokens`)
+5. Click **Create** → It auto-links to your project
+
+This creates the `KV_*` environment variables automatically.
+
+### 3. Add Environment Variables
+
+```bash
+vercel env add EBAY_CLIENT_ID production
+vercel env add EBAY_CLIENT_SECRET production
+vercel env add EBAY_REDIRECT_URI production
+vercel env add EBAY_ENVIRONMENT production    # PRODUCTION or SANDBOX
+vercel env add EBAY_SCOPES production          # Comma-separated scopes
+```
+
+### 4. Update eBay Developer Portal
+
+Add your Vercel URL to the OAuth redirect URLs in eBay Developer Portal:
+```
+https://your-project.vercel.app/auth/callback
+```
+
+### 5. Redeploy
+
+```bash
+vercel --prod
+```
+
+### Vercel URLs
+
+After deployment, your endpoints will be:
+- **Auth**: `https://your-project.vercel.app/auth/login`
+- **Get Token**: `https://your-project.vercel.app/api/get-token/:username`
+- **Test API**: `https://your-project.vercel.app/api/test/:username`
+
 ## Production Notes
 
-- Use HTTPS for production
-- Consider using a database instead of `tokens.json`
-- Add authentication to protect endpoints
-- Encrypt tokens at rest
+- The Vercel deployment uses **Vercel KV** (Redis) for persistent token storage
+- Tokens are stored securely and persist across serverless function invocations
+- Use HTTPS (automatic with Vercel)
+- Consider adding authentication to protect endpoints
+- Monitor usage in Vercel Dashboard
 
 ## License
 
