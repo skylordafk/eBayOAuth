@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Environment & Credentials
+.env
+.env.local
+.env.*.local
+config.json
+
+# Tokens (sensitive)
+tokens.json
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
