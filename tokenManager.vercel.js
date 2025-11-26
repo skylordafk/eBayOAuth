@@ -1,40 +1,63 @@
 /**
- * Token Manager for Vercel KV (Redis) Storage
+ * Token Manager for Redis Storage (Vercel Serverless)
  * 
  * This replaces the file-based tokenManager.js for serverless deployment.
- * Uses Vercel KV for persistent token storage across function invocations.
+ * Uses ioredis for persistent token storage across function invocations.
  */
 
-const { kv } = require('@vercel/kv');
+const Redis = require('ioredis');
+
+// Initialize Redis client using REDIS_URL from Vercel
+// The URL format: redis://default:password@host:port
+let redis = null;
+
+function getRedis() {
+  if (!redis) {
+    const redisUrl = process.env.REDIS_URL;
+    if (!redisUrl) {
+      throw new Error('REDIS_URL environment variable is not set');
+    }
+    redis = new Redis(redisUrl, {
+      maxRetriesPerRequest: 3,
+      retryDelayOnFailover: 100,
+      enableReadyCheck: false,
+      lazyConnect: true,
+    });
+  }
+  return redis;
+}
 
 const TOKEN_PREFIX = 'ebay_token:';
 
 /**
- * Load all tokens from KV store
+ * Load all tokens from Redis
  * @returns {Promise<Object>} All tokens object
  */
 async function loadTokens() {
   try {
-    const keys = await kv.keys(`${TOKEN_PREFIX}*`);
-    if (keys.length === 0) return {};
+    const client = getRedis();
+    await client.connect().catch(() => {}); // Ignore if already connected
+    
+    const keys = await client.keys(`${TOKEN_PREFIX}*`);
+    if (!keys || keys.length === 0) return {};
     
     const tokens = {};
     for (const key of keys) {
       const userId = key.replace(TOKEN_PREFIX, '');
-      const data = await kv.get(key);
+      const data = await client.get(key);
       if (data) {
-        tokens[userId] = data;
+        tokens[userId] = JSON.parse(data);
       }
     }
     return tokens;
   } catch (error) {
-    console.error('Error loading tokens from KV:', error);
+    console.error('Error loading tokens from Redis:', error.message);
     return {};
   }
 }
 
 /**
- * Save tokens to KV store
+ * Save tokens to Redis
  * @param {string} userId - eBay user ID
  * @param {string} accessToken - OAuth access token
  * @param {string} refreshToken - OAuth refresh token
@@ -42,6 +65,9 @@ async function loadTokens() {
  */
 async function saveTokens(userId, accessToken, refreshToken, expiresIn) {
   try {
+    const client = getRedis();
+    await client.connect().catch(() => {});
+    
     const expiresAt = Date.now() + (expiresIn * 1000);
     const tokenData = {
       accessToken,
@@ -50,10 +76,10 @@ async function saveTokens(userId, accessToken, refreshToken, expiresIn) {
       userId
     };
     
-    await kv.set(`${TOKEN_PREFIX}${userId}`, tokenData);
+    await client.set(`${TOKEN_PREFIX}${userId}`, JSON.stringify(tokenData));
     console.log(`Tokens saved for user: ${userId}`);
   } catch (error) {
-    console.error('Error saving tokens to KV:', error);
+    console.error('Error saving tokens to Redis:', error.message);
     throw error;
   }
 }
@@ -65,10 +91,14 @@ async function saveTokens(userId, accessToken, refreshToken, expiresIn) {
  */
 async function getTokens(userId) {
   try {
-    const data = await kv.get(`${TOKEN_PREFIX}${userId}`);
-    return data || null;
+    const client = getRedis();
+    await client.connect().catch(() => {});
+    
+    const data = await client.get(`${TOKEN_PREFIX}${userId}`);
+    if (!data) return null;
+    return JSON.parse(data);
   } catch (error) {
-    console.error('Error getting tokens from KV:', error);
+    console.error('Error getting tokens from Redis:', error.message);
     return null;
   }
 }
@@ -95,14 +125,17 @@ async function isTokenExpired(userId) {
  */
 async function updateAccessToken(userId, accessToken, expiresIn) {
   try {
+    const client = getRedis();
+    await client.connect().catch(() => {});
+    
     const tokens = await getTokens(userId);
     if (tokens) {
       tokens.accessToken = accessToken;
       tokens.expiresAt = Date.now() + (expiresIn * 1000);
-      await kv.set(`${TOKEN_PREFIX}${userId}`, tokens);
+      await client.set(`${TOKEN_PREFIX}${userId}`, JSON.stringify(tokens));
     }
   } catch (error) {
-    console.error('Error updating access token in KV:', error);
+    console.error('Error updating access token in Redis:', error.message);
     throw error;
   }
 }
@@ -113,10 +146,13 @@ async function updateAccessToken(userId, accessToken, expiresIn) {
  */
 async function deleteTokens(userId) {
   try {
-    await kv.del(`${TOKEN_PREFIX}${userId}`);
+    const client = getRedis();
+    await client.connect().catch(() => {});
+    
+    await client.del(`${TOKEN_PREFIX}${userId}`);
     console.log(`Tokens deleted for user: ${userId}`);
   } catch (error) {
-    console.error('Error deleting tokens from KV:', error);
+    console.error('Error deleting tokens from Redis:', error.message);
     throw error;
   }
 }
@@ -129,4 +165,3 @@ module.exports = {
   updateAccessToken,
   deleteTokens
 };
-

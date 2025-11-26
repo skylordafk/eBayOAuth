@@ -24,3 +24,7 @@ Thumbs.db
 *.swp
 *.swo
 .vercel
+
+# Vercel env files
+.env.production
+.env.vercel
